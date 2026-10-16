@@ -1,4 +1,5 @@
 const asyncHandler = require("../utils/asyncHandler");
+const escapeRegex = require("../utils/escapeRegex");
 const mongoose = require("mongoose");
 const CrmBrand = require("../model/crmBrand");
 const CrmDeal = require("../model/crmDeal");
@@ -8,10 +9,6 @@ const User = require("../model/user");
 
 function getUserId(req) {
   return req.user?.id || req.user?._id;
-}
-
-function escapeRegex(value) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 async function seedInitialCrmData(userId) {
