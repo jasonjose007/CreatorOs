@@ -377,6 +377,13 @@ const createDeal = asyncHandler(async (req, res) => {
     return res.status(400).json({ success: false, message: "Deal name and company name are required" });
   }
 
+  if (amount !== undefined) {
+    const parsed = Number(amount);
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      return res.status(400).json({ success: false, message: "Amount must be a non-negative number" });
+    }
+  }
+
   const deal = await CrmDeal.create({
     creatorId: userId,
     dealName,
@@ -385,7 +392,7 @@ const createDeal = asyncHandler(async (req, res) => {
     contactName,
     contactEmail,
     stage: stage || "lead",
-    amount: Number(amount) || 0,
+    amount: amount !== undefined ? Number(amount) : 0,
     deliverables,
     statusTag,
     notes,
@@ -504,6 +511,20 @@ const createInvoice = asyncHandler(async (req, res) => {
     return res.status(400).json({ success: false, message: "Company name, invoice name, and amount are required" });
   }
 
+  const parsedAmount = Number(amount);
+  if (!Number.isFinite(parsedAmount) || parsedAmount < 0) {
+    return res.status(400).json({ success: false, message: "Amount must be a non-negative number" });
+  }
+
+  let parsedDueDate = new Date(Date.now() + 86400000 * 14);
+  if (dueDate) {
+    const d = new Date(dueDate);
+    if (Number.isNaN(d.getTime())) {
+      return res.status(400).json({ success: false, message: "Invalid dueDate format" });
+    }
+    parsedDueDate = d;
+  }
+
   const count = await CrmInvoice.countDocuments({ creatorId: userId });
   const invoiceNumber = `INV-${new Date().getFullYear()}-${String(count + 1).padStart(3, "0")}`;
 
@@ -512,9 +533,9 @@ const createInvoice = asyncHandler(async (req, res) => {
     invoiceNumber,
     companyName,
     invoiceName,
-    amount: Number(amount),
+    amount: parsedAmount,
     status: status || "pending",
-    dueDate: dueDate ? new Date(dueDate) : new Date(Date.now() + 86400000 * 14),
+    dueDate: parsedDueDate,
     notes,
   });
 
