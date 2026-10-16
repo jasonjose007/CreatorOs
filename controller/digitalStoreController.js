@@ -222,7 +222,23 @@ exports.updateProduct = async (req, res) => {
     });
 
     if (req.body.title && req.body.title !== product.title) {
-      product.slug = createSlug(req.body.title);
+      const baseSlug = createSlug(req.body.title) || "digital-product";
+      // Only run the uniqueness loop if the new slug differs from the current one
+      if (baseSlug !== product.slug) {
+        let slug = baseSlug;
+        let counter = 1;
+        // Exclude the current product from the uniqueness check
+        while (
+          await DigitalProduct.findOne({
+            creatorId: product.creatorId,
+            slug,
+            _id: { $ne: product._id },
+          })
+        ) {
+          slug = `${baseSlug}-${counter++}`;
+        }
+        product.slug = slug;
+      }
     }
 
     await product.save();
