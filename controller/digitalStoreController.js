@@ -311,13 +311,18 @@ exports.createCheckoutOrder = async (req, res) => {
 
     await order.save();
 
-    // Update product stats
-    product.totalSales += 1;
-    product.totalRevenue += couponResult.finalPrice;
+    // Update product stats atomically to prevent TOCTOU race conditions.
+    // Using $inc ensures concurrent checkouts accumulate correctly.
+    const incFields = { totalSales: 1, totalRevenue: couponResult.finalPrice };
     if (couponResult.coupon) {
-      couponResult.coupon.timesUsed += 1;
+      // Atomically increment the coupon's timesUsed inside the coupons array
+      await DigitalProduct.findOneAndUpdate(
+        { _id: product._id, "coupons.code": couponResult.coupon.code },
+        { $inc: { totalSales: 1, totalRevenue: couponResult.finalPrice, "coupons.$.timesUsed": 1 } }
+      );
+    } else {
+      await DigitalProduct.findByIdAndUpdate(product._id, { $inc: incFields });
     }
-    await product.save();
 
     return res.status(201).json({
       success: true,
@@ -386,15 +391,32 @@ exports.validateAndConsumeDownload = async (req, res) => {
       return res.status(404).json({ success: false, message: "Associated product file missing" });
     }
 
-    tokenRecord.downloadCount += 1;
-    await order.save();
+    // Atomically increment downloadCount ONLY if it's still below maxDownloads.
+    // This prevents the TOCTOU race where concurrent requests all pass the check above.
+    const result = await DigitalOrder.findOneAndUpdate(
+      {
+        _id: order._id,
+        "downloadTokens.token": token,
+        "downloadTokens.downloadCount": { $lt: tokenRecord.maxDownloads },
+      },
+      { $inc: { "downloadTokens.$.downloadCount": 1 } },
+      { new: true }
+    );
 
+    if (!result) {
+      return res.status(429).json({
+        success: false,
+        message: "Maximum download limit reached for this token",
+      });
+    }
+
+    const updatedToken = result.downloadTokens.find(t => t.token === token);
     return res.status(200).json({
       success: true,
       message: "Download authorized",
       fileUrl: product.fileUrl,
       fileName: product.title,
-      remainingDownloads: tokenRecord.maxDownloads - tokenRecord.downloadCount,
+      remainingDownloads: updatedToken.maxDownloads - updatedToken.downloadCount,
     });
   } catch (error) {
     return res.status(500).json({
@@ -429,12 +451,17 @@ exports.refundOrder = async (req, res) => {
 
     await order.save();
 
-    // Adjust product revenue
-    const product = await DigitalProduct.findById(order.productId);
-    if (product) {
-      product.totalRevenue = Math.max(0, product.totalRevenue - order.amountPaid);
-      await product.save();
-    }
+    // Adjust product revenue atomically to prevent race conditions
+    // with concurrent refunds or checkouts.
+    await DigitalProduct.findByIdAndUpdate(
+      order.productId,
+      { $inc: { totalRevenue: -order.amountPaid } }
+    );
+    // Ensure revenue never goes negative (the $inc can go below 0)
+    await DigitalProduct.findOneAndUpdate(
+      { _id: order.productId, totalRevenue: { $lt: 0 } },
+      { $set: { totalRevenue: 0 } }
+    );
 
     return res.status(200).json({
       success: true,
