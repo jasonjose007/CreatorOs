@@ -410,8 +410,9 @@ const logTaskTime = asyncHandler(async (req, res) => {
     return res.json({ success: true, task });
   }
 
+  const creatorId = req.user?.id || req.user?._id;
   const taskDoc = await Task.findOneAndUpdate(
-    { _id: taskId },
+    { _id: taskId, creatorId },
     { $inc: { spentHours: hours } },
     { new: true }
   );
