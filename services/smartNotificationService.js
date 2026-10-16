@@ -381,12 +381,24 @@ async function getNotificationHistory(userId, filters = {}) {
     const { page = 1, limit = 20, category, status } = filters;
     const query = { userId };
     if (category) query.category = category;
-    if (status) query.status = status;
+
+    // Translate "unread" pseudo-status into a readAt + active-status query
+    if (status === "unread") {
+        query.readAt = null;
+        query.status = { $in: ["sent", "delivered", "pending"] };
+    } else if (status) {
+        query.status = status;
+    }
 
     const skip = (page - 1) * limit;
-    const [notifications, total] = await Promise.all([
+    const [notifications, total, unreadCount] = await Promise.all([
         Notification.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit),
         Notification.countDocuments(query),
+        Notification.countDocuments({
+            userId,
+            readAt: null,
+            status: { $in: ["sent", "delivered", "pending"] },
+        }),
     ]);
 
     return {
@@ -394,7 +406,22 @@ async function getNotificationHistory(userId, filters = {}) {
         total,
         page,
         pages: Math.ceil(total / limit),
+        unreadCount,
     };
+}
+
+/**
+ * Get the count of unread notifications for a user.
+ * Unread = readAt is null AND status is one of the active delivery states.
+ * @param {String|ObjectId} userId
+ * @returns {Promise<number>}
+ */
+async function getUnreadCount(userId) {
+    return Notification.countDocuments({
+        userId,
+        readAt: null,
+        status: { $in: ["sent", "delivered", "pending"] },
+    });
 }
 
 /**
@@ -646,6 +673,7 @@ module.exports = {
     sendNotification,
     deliverToChannels,
     getNotificationHistory,
+    getUnreadCount,
     markAsRead,
     markAllAsRead,
     trackEngagement,
