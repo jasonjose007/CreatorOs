@@ -47,6 +47,16 @@ document.addEventListener('DOMContentLoaded', function() {
             showError('Failed to calculate rate. Please try again.');
         }
     });
+
+    // Wire up buttons via event listeners instead of inline onclick (CSP-safe)
+    const resetBtn = document.getElementById('reset-calculator-btn');
+    if (resetBtn) resetBtn.addEventListener('click', resetCalculator);
+
+    const exportBtn = document.getElementById('export-results-btn');
+    if (exportBtn) exportBtn.addEventListener('click', exportResults);
+
+    const addToCrmBtn = document.getElementById('add-to-crm-btn');
+    if (addToCrmBtn) addToCrmBtn.addEventListener('click', addToCrm);
 });
 
 function showLoading() {
