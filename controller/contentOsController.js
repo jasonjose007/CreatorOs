@@ -364,6 +364,12 @@ async function convertItem(req, res) {
             { new: true, runValidators: true }
         );
 
+        // Sync scheduled content when the item transitions to or from "scheduled"
+        if (newStatus === "scheduled" || item.status === "scheduled") {
+            const userId = req.user && req.user._id ? req.user._id : req.user.id;
+            await syncScheduledContent({ userId, item: updated, previousItem: item });
+        }
+
         return res.json({ success: true, item: updated, message: `Converted item to ${newStatus}.` });
     } catch (err) {
         console.error("Error converting Content OS item:", err);
