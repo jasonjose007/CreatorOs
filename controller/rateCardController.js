@@ -144,7 +144,6 @@ exports.updateRateCard = async (req, res) => {
     }
 
     const fields = [
-      "title",
       "niche",
       "currency",
       "deliverables",
@@ -161,8 +160,15 @@ exports.updateRateCard = async (req, res) => {
       }
     });
 
-    if (req.body.title && req.body.title !== card.title) {
-      card.slug = createSlug(req.body.title);
+    if (req.body.title !== undefined && req.body.title !== card.title) {
+      card.title = req.body.title;
+      let baseSlug = createSlug(req.body.title) || "rate-card";
+      let slug = baseSlug;
+      let counter = 1;
+      while (await CreatorRateCard.findOne({ creatorId, slug, _id: { $ne: id } })) {
+        slug = `${baseSlug}-${counter++}`;
+      }
+      card.slug = slug;
     }
 
     await card.save();
